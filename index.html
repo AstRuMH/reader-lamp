@@ -1,0 +1,674 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Lamp — Read Aloud</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
+<style>
+  :root{
+    --paper:#F5F4EF;
+    --ink:#20241F;
+    --ink-soft:#5C6058;
+    --line:#DEDCD2;
+    --lamp:#E2A33B;
+    --lamp-glow:rgba(226,163,59,0.28);
+    --surface:#FFFFFF;
+    --shadow:rgba(32,36,31,0.08);
+  }
+  [data-theme="dark"]{
+    --paper:#14171B;
+    --ink:#ECE9E1;
+    --ink-soft:#9A9C93;
+    --line:#2A2E2A;
+    --lamp:#F0B94D;
+    --lamp-glow:rgba(240,185,77,0.22);
+    --surface:#1B1F1C;
+    --shadow:rgba(0,0,0,0.35);
+  }
+  *{box-sizing:border-box;}
+  html,body{height:100%;}
+  body{
+    margin:0;
+    background:var(--paper);
+    color:var(--ink);
+    font-family:'Inter',sans-serif;
+    transition:background .35s ease, color .35s ease;
+    -webkit-font-smoothing:antialiased;
+    min-height:100vh;
+    display:flex;
+    flex-direction:column;
+  }
+
+  /* ---------- Header ---------- */
+  header{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    padding:22px 28px 10px;
+  }
+  .logo{
+    display:flex;
+    align-items:center;
+    gap:10px;
+    font-family:'Fraunces',serif;
+    font-weight:600;
+    font-size:1.35rem;
+    letter-spacing:-0.02em;
+  }
+  .logo-bulb{
+    width:14px;height:14px;border-radius:50%;
+    background:var(--lamp);
+    box-shadow:0 0 0px var(--lamp-glow);
+    transition:box-shadow .4s ease;
+  }
+  .logo-bulb.lit{
+    box-shadow:0 0 16px 4px var(--lamp-glow);
+  }
+  .theme-toggle{
+    border:1px solid var(--line);
+    background:var(--surface);
+    color:var(--ink-soft);
+    border-radius:20px;
+    padding:7px 14px;
+    font-family:'IBM Plex Mono',monospace;
+    font-size:0.72rem;
+    letter-spacing:.04em;
+    cursor:pointer;
+    transition:all .2s ease;
+  }
+  .theme-toggle:hover{ color:var(--ink); border-color:var(--ink-soft); }
+  .theme-toggle:focus-visible, button:focus-visible, [contenteditable]:focus-visible{
+    outline:2px solid var(--lamp);
+    outline-offset:2px;
+  }
+
+  /* ---------- Main ---------- */
+  main{
+    flex:1;
+    width:100%;
+    max-width:720px;
+    margin:0 auto;
+    padding:18px 28px 140px;
+    display:flex;
+    flex-direction:column;
+  }
+
+  .eyebrow{
+    font-family:'IBM Plex Mono',monospace;
+    font-size:0.7rem;
+    color:var(--ink-soft);
+    letter-spacing:.08em;
+    text-transform:uppercase;
+    margin:8px 2px 14px;
+  }
+
+  .page{
+    background:var(--surface);
+    border:1px solid var(--line);
+    border-radius:6px;
+    box-shadow:0 1px 3px var(--shadow);
+    padding:34px 36px;
+    min-height:340px;
+    flex:1;
+    position:relative;
+  }
+  .page-empty-hint{
+    font-family:'Fraunces',serif;
+    font-style:italic;
+    color:var(--ink-soft);
+    font-size:1.05rem;
+    line-height:1.7;
+    pointer-events:none;
+    position:absolute;
+    top:34px;left:36px;right:36px;
+  }
+  #textArea{
+    outline:none;
+    font-family:'Fraunces',serif;
+    font-size:1.15rem;
+    line-height:1.85;
+    letter-spacing:-0.005em;
+    min-height:280px;
+    white-space:pre-wrap;
+    word-wrap:break-word;
+  }
+  #textArea .word{
+    border-radius:3px;
+    transition:background .12s ease, color .12s ease;
+    padding:0 1px;
+  }
+  #textArea .word.active{
+    background:var(--lamp-glow);
+    box-shadow:0 1px 0 0 var(--lamp);
+  }
+
+  .drop-row{
+    display:flex;
+    align-items:center;
+    gap:10px;
+    margin-top:14px;
+  }
+  .file-btn{
+    border:1px dashed var(--line);
+    background:transparent;
+    color:var(--ink-soft);
+    font-family:'IBM Plex Mono',monospace;
+    font-size:0.72rem;
+    letter-spacing:.03em;
+    padding:9px 16px;
+    border-radius:5px;
+    cursor:pointer;
+    transition:all .2s ease;
+  }
+  .file-btn:hover{ border-color:var(--lamp); color:var(--ink); }
+  .file-name{
+    font-family:'IBM Plex Mono',monospace;
+    font-size:0.72rem;
+    color:var(--ink-soft);
+  }
+  .clear-btn{
+    margin-left:auto;
+    border:none;
+    background:none;
+    color:var(--ink-soft);
+    font-family:'IBM Plex Mono',monospace;
+    font-size:0.7rem;
+    cursor:pointer;
+    text-decoration:underline;
+    text-underline-offset:3px;
+  }
+  .clear-btn:hover{ color:var(--ink); }
+
+  /* ---------- Bottom control dock ---------- */
+  .dock{
+    position:fixed;
+    left:0;right:0;bottom:0;
+    display:flex;
+    justify-content:center;
+    padding:16px 20px calc(16px + env(safe-area-inset-bottom));
+    background:linear-gradient(to top, var(--paper) 55%, transparent);
+    pointer-events:none;
+  }
+  .dock-inner{
+    pointer-events:auto;
+    width:100%;
+    max-width:680px;
+    background:var(--surface);
+    border:1px solid var(--line);
+    border-radius:14px;
+    box-shadow:0 8px 24px var(--shadow);
+    padding:14px 18px;
+    display:flex;
+    flex-direction:column;
+    gap:12px;
+  }
+  .transport{
+    display:flex;
+    align-items:center;
+    gap:14px;
+  }
+  .transport-btn{
+    border:none;
+    background:none;
+    color:var(--ink);
+    cursor:pointer;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    width:38px;height:38px;
+    border-radius:50%;
+    transition:background .15s ease;
+  }
+  .transport-btn:hover{ background:var(--lamp-glow); }
+  .transport-btn.play{
+    width:48px;height:48px;
+    background:var(--lamp);
+    color:#1a1a1a;
+  }
+  .transport-btn.play:hover{ background:var(--lamp); filter:brightness(1.08); }
+  .transport-btn svg{ width:18px; height:18px; }
+  .transport-btn.play svg{ width:20px; height:20px; }
+
+  .status{
+    font-family:'IBM Plex Mono',monospace;
+    font-size:0.7rem;
+    color:var(--ink-soft);
+    margin-left:2px;
+    flex:1;
+  }
+
+  .sliders{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:10px 18px;
+  }
+  .slider-group{
+    display:flex;
+    flex-direction:column;
+    gap:4px;
+  }
+  .slider-label{
+    display:flex;
+    justify-content:space-between;
+    font-family:'IBM Plex Mono',monospace;
+    font-size:0.66rem;
+    color:var(--ink-soft);
+    letter-spacing:.03em;
+    text-transform:uppercase;
+  }
+  input[type="range"]{
+    -webkit-appearance:none;
+    width:100%;
+    height:3px;
+    background:var(--line);
+    border-radius:2px;
+    outline:none;
+  }
+  input[type="range"]::-webkit-slider-thumb{
+    -webkit-appearance:none;
+    width:13px;height:13px;
+    border-radius:50%;
+    background:var(--lamp);
+    cursor:pointer;
+    margin-top:-5px;
+  }
+  input[type="range"]::-moz-range-thumb{
+    width:13px;height:13px;border:none;border-radius:50%;
+    background:var(--lamp); cursor:pointer;
+  }
+
+  .voice-row{
+    display:flex;
+    align-items:center;
+    gap:8px;
+  }
+  select{
+    flex:1;
+    background:var(--paper);
+    color:var(--ink);
+    border:1px solid var(--line);
+    border-radius:6px;
+    padding:6px 10px;
+    font-family:'Inter',sans-serif;
+    font-size:0.78rem;
+  }
+
+  @media (max-width:520px){
+    .sliders{ grid-template-columns:1fr; }
+    header{ padding:18px 18px 6px; }
+    main{ padding:14px 18px 160px; }
+    .page{ padding:24px 20px; }
+  }
+</style>
+</head>
+<body data-theme="light">
+
+<header>
+  <div class="logo"><span class="logo-bulb" id="bulb"></span>Lamp</div>
+  <button class="theme-toggle" id="themeToggle" aria-label="Toggle dark mode">DARK</button>
+</header>
+
+<main>
+  <div class="eyebrow" id="wordCount">0 words · ready</div>
+
+  <div class="page">
+    <div class="page-empty-hint" id="emptyHint">Paste text here, or upload a PDF / Word file below — then press play.</div>
+    <div id="textArea" contenteditable="true" spellcheck="false"></div>
+  </div>
+
+  <div class="drop-row">
+    <button class="file-btn" id="fileBtn" type="button">Upload PDF or DOCX</button>
+    <input type="file" id="fileInput" accept=".pdf,.docx" style="display:none">
+    <span class="file-name" id="fileName"></span>
+    <button class="clear-btn" id="clearBtn">clear</button>
+  </div>
+</main>
+
+<div class="dock">
+  <div class="dock-inner">
+    <div class="transport">
+      <button class="transport-btn" id="rewindBtn" aria-label="Back one sentence">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 6h2v12H6zm3.5 6l8.5 6V6z"/></svg>
+      </button>
+      <button class="transport-btn play" id="playBtn" aria-label="Play">
+        <svg id="playIcon" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+      </button>
+      <button class="transport-btn" id="forwardBtn" aria-label="Forward one sentence">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M16 6h2v12h-2zM6 6v12l8.5-6z"/></svg>
+      </button>
+      <div class="status" id="status">idle</div>
+    </div>
+
+    <div class="sliders">
+      <div class="slider-group">
+        <div class="slider-label"><span>Speed</span><span id="rateVal">1.0×</span></div>
+        <input type="range" id="rate" min="0.5" max="1.8" step="0.05" value="1">
+      </div>
+      <div class="slider-group">
+        <div class="slider-label"><span>Pitch</span><span id="pitchVal">1.0</span></div>
+        <input type="range" id="pitch" min="0.5" max="1.5" step="0.05" value="1">
+      </div>
+    </div>
+
+    <div class="voice-row">
+      <select id="voiceSelect"></select>
+    </div>
+  </div>
+</div>
+
+<script>
+(() => {
+  const textArea = document.getElementById('textArea');
+  const emptyHint = document.getElementById('emptyHint');
+  const wordCountEl = document.getElementById('wordCount');
+  const statusEl = document.getElementById('status');
+  const playBtn = document.getElementById('playBtn');
+  const playIcon = document.getElementById('playIcon');
+  const rewindBtn = document.getElementById('rewindBtn');
+  const forwardBtn = document.getElementById('forwardBtn');
+  const rateSlider = document.getElementById('rate');
+  const pitchSlider = document.getElementById('pitch');
+  const rateVal = document.getElementById('rateVal');
+  const pitchVal = document.getElementById('pitchVal');
+  const voiceSelect = document.getElementById('voiceSelect');
+  const themeToggle = document.getElementById('themeToggle');
+  const bulb = document.getElementById('bulb');
+  const fileBtn = document.getElementById('fileBtn');
+  const fileInput = document.getElementById('fileInput');
+  const fileName = document.getElementById('fileName');
+  const clearBtn = document.getElementById('clearBtn');
+
+  const ICON_PLAY = '<path d="M8 5v14l11-7z"/>';
+  const ICON_PAUSE = '<path d="M6 5h4v14H6zm8 0h4v14h-4z"/>';
+
+  let synth = window.speechSynthesis;
+  let voices = [];
+  let utterance = null;
+  let sentences = [];      // array of {text, startWord}
+  let words = [];          // array of {span, text}
+  let currentSentenceIdx = 0;
+  let isPlaying = false;
+  let isPaused = false;
+
+  let pdfReady = false;
+  let mammothReady = false;
+  try {
+    if (window.pdfjsLib) {
+      pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+      pdfReady = true;
+    }
+  } catch (err) { console.error('pdf.js failed to initialize', err); }
+  try {
+    if (window.mammoth) mammothReady = true;
+  } catch (err) { console.error('mammoth failed to initialize', err); }
+
+  // ---------- Theme ----------
+  function setTheme(dark){
+    document.body.setAttribute('data-theme', dark ? 'dark' : 'light');
+    themeToggle.textContent = dark ? 'LIGHT' : 'DARK';
+  }
+  themeToggle.addEventListener('click', () => {
+    const isDark = document.body.getAttribute('data-theme') === 'dark';
+    setTheme(!isDark);
+  });
+
+  // ---------- Voices ----------
+  function loadVoices(){
+    voices = synth.getVoices();
+    if (!voices.length) return;
+    voiceSelect.innerHTML = '';
+    const preferredOrder = ['Google US English', 'Samantha', 'Microsoft Aria', 'Google UK English Female'];
+    const sorted = [...voices].sort((a,b) => {
+      const ai = preferredOrder.indexOf(a.name), bi = preferredOrder.indexOf(b.name);
+      if (ai !== -1 && bi !== -1) return ai - bi;
+      if (ai !== -1) return -1;
+      if (bi !== -1) return 1;
+      return a.name.localeCompare(b.name);
+    });
+    sorted.forEach((v, i) => {
+      const opt = document.createElement('option');
+      opt.value = v.name;
+      opt.textContent = `${v.name} (${v.lang})`;
+      voiceSelect.appendChild(opt);
+    });
+  }
+  synth.onvoiceschanged = loadVoices;
+  loadVoices();
+
+  // ---------- Text handling ----------
+  function updateWordCount(){
+    const text = textArea.innerText.trim();
+    const count = text ? text.split(/\s+/).length : 0;
+    wordCountEl.textContent = `${count} word${count === 1 ? '' : 's'} · ${statusEl.textContent}`;
+    emptyHint.style.display = text ? 'none' : 'block';
+  }
+
+  function buildSentencesFromText(text){
+    // Wrap text into word spans grouped by sentence for highlighting + navigation.
+    textArea.innerHTML = '';
+    words = [];
+    sentences = [];
+    const sentenceChunks = text.match(/[^.!?]+[.!?]*(\s+|$)/g) || [text];
+    let wordGlobalIndex = 0;
+
+    sentenceChunks.forEach(chunk => {
+      if (!chunk.trim()) return;
+      const startWordIdx = wordGlobalIndex;
+      const tokens = chunk.split(/(\s+)/);
+      const frag = document.createDocumentFragment();
+      tokens.forEach(tok => {
+        if (tok.trim() === '') {
+          frag.appendChild(document.createTextNode(tok));
+        } else {
+          const span = document.createElement('span');
+          span.className = 'word';
+          span.textContent = tok;
+          frag.appendChild(span);
+          words.push({ span, text: tok });
+          wordGlobalIndex++;
+        }
+      });
+      textArea.appendChild(frag);
+      sentences.push({ text: chunk, startWord: startWordIdx });
+    });
+    updateWordCount();
+  }
+
+  textArea.addEventListener('input', () => {
+    // Only re-tokenize on manual typing when not actively playing.
+    if (!isPlaying) updateWordCount();
+  });
+  textArea.addEventListener('blur', () => {
+    if (!isPlaying) {
+      const text = textArea.innerText;
+      if (text.trim()) buildSentencesFromText(text);
+    }
+  });
+
+  // ---------- File upload ----------
+  fileBtn.addEventListener('click', () => fileInput.click());
+  fileInput.addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    fileName.textContent = file.name;
+    statusEl.textContent = 'loading file…';
+    try {
+      let text = '';
+      if (file.name.toLowerCase().endsWith('.pdf')) {
+        if (!pdfReady) throw new Error('PDF reader library did not load — check your internet connection and reload the page.');
+        const buf = await file.arrayBuffer();
+        const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
+        const pageTexts = [];
+        for (let p = 1; p <= pdf.numPages; p++) {
+          const page = await pdf.getPage(p);
+          const content = await page.getTextContent();
+          pageTexts.push(content.items.map(it => it.str).join(' '));
+        }
+        text = pageTexts.join('\n\n');
+      } else if (file.name.toLowerCase().endsWith('.docx')) {
+        if (!mammothReady) throw new Error('DOCX reader library did not load — check your internet connection and reload the page.');
+        const buf = await file.arrayBuffer();
+        const result = await mammoth.extractRawText({ arrayBuffer: buf });
+        text = result.value;
+      } else {
+        throw new Error('Please choose a .pdf or .docx file.');
+      }
+      buildSentencesFromText(text.trim());
+      statusEl.textContent = 'idle';
+      updateWordCount();
+    } catch (err) {
+      statusEl.textContent = err.message || 'could not read file';
+      console.error(err);
+    }
+  });
+
+  clearBtn.addEventListener('click', () => {
+    stopSpeech();
+    textArea.innerHTML = '';
+    words = []; sentences = [];
+    fileName.textContent = '';
+    fileInput.value = '';
+    statusEl.textContent = 'idle';
+    updateWordCount();
+  });
+
+  // ---------- Speech playback ----------
+  function clearActiveWord(){
+    words.forEach(w => w.span.classList.remove('active'));
+  }
+
+  function speakFromSentence(idx){
+    if (idx < 0 || idx >= sentences.length) { stopSpeech(); return; }
+    currentSentenceIdx = idx;
+    const sentence = sentences[idx];
+    const utter = new SpeechSynthesisUtterance(sentence.text);
+    const chosenVoice = voices.find(v => v.name === voiceSelect.value);
+    if (chosenVoice) utter.voice = chosenVoice;
+    utter.rate = parseFloat(rateSlider.value);
+    utter.pitch = parseFloat(pitchSlider.value);
+
+    utter.onboundary = (event) => {
+      if (event.name !== 'word' && event.charIndex === undefined) return;
+      // Map charIndex within this sentence to a global word.
+      const upTo = sentence.text.slice(0, event.charIndex);
+      const wordIdxInSentence = (upTo.match(/\S+/g) || []).length;
+      const globalIdx = sentence.startWord + wordIdxInSentence;
+      clearActiveWord();
+      if (words[globalIdx]) {
+        words[globalIdx].span.classList.add('active');
+        words[globalIdx].span.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      }
+    };
+
+    utter.onend = () => {
+      if (isPlaying && !isPaused) {
+        speakFromSentence(idx + 1);
+      }
+    };
+
+    utter.onerror = () => { stopSpeech(); };
+
+    utterance = utter;
+    synth.speak(utter);
+  }
+
+  function startSpeech(){
+    if (!words.length) {
+      const text = textArea.innerText.trim();
+      if (!text) return;
+      buildSentencesFromText(text);
+    }
+    isPlaying = true;
+    isPaused = false;
+    playIcon.innerHTML = ICON_PAUSE;
+    bulb.classList.add('lit');
+    statusEl.textContent = 'reading…';
+    updateWordCount();
+    speakFromSentence(currentSentenceIdx || 0);
+  }
+
+  function pauseSpeech(){
+    synth.cancel();
+    isPaused = true;
+    isPlaying = false;
+    playIcon.innerHTML = ICON_PLAY;
+    bulb.classList.remove('lit');
+    statusEl.textContent = 'paused';
+    updateWordCount();
+  }
+
+  function stopSpeech(){
+    synth.cancel();
+    isPlaying = false;
+    isPaused = false;
+    currentSentenceIdx = 0;
+    playIcon.innerHTML = ICON_PLAY;
+    bulb.classList.remove('lit');
+    clearActiveWord();
+    statusEl.textContent = 'idle';
+    updateWordCount();
+  }
+
+  playBtn.addEventListener('click', () => {
+    if (isPlaying) {
+      pauseSpeech();
+    } else {
+      startSpeech();
+    }
+  });
+
+  rewindBtn.addEventListener('click', () => {
+    const wasPlaying = isPlaying;
+    synth.cancel();
+    currentSentenceIdx = Math.max(0, currentSentenceIdx - 1);
+    if (wasPlaying) speakFromSentence(currentSentenceIdx);
+  });
+
+  forwardBtn.addEventListener('click', () => {
+    const wasPlaying = isPlaying;
+    synth.cancel();
+    currentSentenceIdx = Math.min(sentences.length - 1, currentSentenceIdx + 1);
+    if (wasPlaying) speakFromSentence(currentSentenceIdx);
+  });
+
+  rateSlider.addEventListener('input', () => {
+    rateVal.textContent = parseFloat(rateSlider.value).toFixed(2) + '×';
+  });
+  pitchSlider.addEventListener('input', () => {
+    pitchVal.textContent = parseFloat(pitchSlider.value).toFixed(2);
+  });
+
+  // Click a word to jump playback there.
+  textArea.addEventListener('click', (e) => {
+    if (!e.target.classList.contains('word')) return;
+    const idx = words.findIndex(w => w.span === e.target);
+    if (idx === -1) return;
+    let sIdx = 0;
+    for (let i = 0; i < sentences.length; i++) {
+      if (sentences[i].startWord <= idx) sIdx = i; else break;
+    }
+    const wasPlaying = isPlaying;
+    synth.cancel();
+    currentSentenceIdx = sIdx;
+    if (wasPlaying || isPaused) {
+      startSpeechFromClick();
+    }
+  });
+  function startSpeechFromClick(){
+    isPlaying = true; isPaused = false;
+    playIcon.innerHTML = ICON_PAUSE;
+    bulb.classList.add('lit');
+    statusEl.textContent = 'reading…';
+    speakFromSentence(currentSentenceIdx);
+  }
+
+  updateWordCount();
+})();
+</script>
+
+</body>
+</html>
